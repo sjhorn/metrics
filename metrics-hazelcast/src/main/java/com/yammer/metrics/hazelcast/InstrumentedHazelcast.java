@@ -220,7 +220,7 @@ public class InstrumentedHazelcast {
     }
 
     private static void instrumentLock(MetricsRegistry registry, final ILock lock) {
-        String name = lock.getId().toString();
+        String name = "lock_"+Integer.toHexString(System.identityHashCode(lock));
         registry.newGauge(Hazelcast.class, "number-of-failed-locks", name,
                 new Gauge<Long>() {
                     @Override

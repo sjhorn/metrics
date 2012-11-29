@@ -12,6 +12,7 @@ import org.junit.Test;
 
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.core.ILock;
 import com.hazelcast.core.IMap;
 import com.hazelcast.core.IQueue;
 import com.yammer.metrics.core.Gauge;
@@ -23,6 +24,7 @@ import com.yammer.metrics.hazelcast.InstrumentedHazelcast;
 public class InstrumentedHazelcastTest {
     private HazelcastInstance hzInstance;
     private MetricsRegistry registry;
+    private Map<String, String> stats;
     
     @Before
     public void setUp() throws Exception {
@@ -55,7 +57,7 @@ public class InstrumentedHazelcastTest {
         map1.get("keyY");
         map1.get("keyZ");
         
-        Map<String, String> stats = getStats();
+        stats = getStats();
         
         assertEquals("3", stats.get("foo.number-of-puts"));
         assertEquals("8", stats.get("foo.number-of-gets"));
@@ -81,7 +83,7 @@ public class InstrumentedHazelcastTest {
         item = queue.poll();
         assertEquals(null, item);
         
-        Map<String, String> stats = getStats();
+        stats = getStats();
         
         assertEquals("2", stats.get("bar.number-of-polls"));
         assertEquals("1", stats.get("bar.number-of-offers"));
@@ -90,9 +92,37 @@ public class InstrumentedHazelcastTest {
     
     @Test
     public void lockStats() throws Exception {
-        // TODO
+        String toLock1 = new String("Lock 1");
+        String toLock2 = new String("Lock 2");
+        ILock lock1 = hzInstance.getLock(toLock1);
+        ILock lock2 = hzInstance.getLock(toLock2);
+        
+        InstrumentedHazelcast.instrument(registry, hzInstance);
+        
+        lock1.lock();
+        Thread.sleep(1000);
+        lock1.unlock();
+        
+        lock2.lock();
+        Thread.sleep(1000);
+        lock2.unlock();
+        
+        stats = getStats();
+        
+        printStats();
+        System.out.println("\n\n");
+        System.out.flush();
+        
+        String lock1Key = "lock_"+Integer.toHexString(System.identityHashCode(lock1));
+        String lock2Key = "lock_"+Integer.toHexString(System.identityHashCode(lock2));
+        
+        assertEquals("1", stats.get(lock1Key+".number-of-locks"));
+        assertEquals("1", stats.get(lock1Key+".number-of-unlocks"));
+        
+        assertEquals("1", stats.get(lock2Key+".number-of-locks"));
+        assertEquals("1", stats.get(lock2Key+".number-of-unlocks"));
     }
-    
+/*    
     @Test
     public void semaphoreStats() throws Exception {
         // TODO
@@ -112,9 +142,9 @@ public class InstrumentedHazelcastTest {
     public void topicStats() throws Exception {
         // TODO
     }
-    
+*/    
     private Map<String, String> getStats() throws Exception {
-        Thread.sleep(1); // Seems to be an async lag on hz metrics
+        Thread.sleep(3000); // Seems to be an async lag on hz metrics
         
         Map<String, String> stats = new HashMap<String, String>(); 
         for(Entry<MetricName, Metric>  entry : registry.getAllMetrics().entrySet()) {
@@ -126,8 +156,10 @@ public class InstrumentedHazelcastTest {
     }
     
     private void printStats() throws Exception {
-        for(Entry<String,String> entry: getStats().entrySet()) {
+        for(Entry<String,String> entry: stats.entrySet()) {
             System.out.println(entry.getKey()+":"+entry.getValue());
+            System.out.flush();
         }
+        
     }
 }
